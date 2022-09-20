@@ -7,14 +7,14 @@ import { SchedulerRegistry } from '@nestjs/schedule';
 import { Test } from '@nestjs/testing';
 import { ApiOptions } from '@polkadot/api/types';
 import { RuntimeVersion } from '@polkadot/types/interfaces';
+import { delay } from '@subql/common';
 import {
   SubstrateDatasourceKind,
   SubstrateHandlerKind,
 } from '@subql/common-substrate';
+import { NodeConfig } from '@subql/node-core';
 import { GraphQLSchema } from 'graphql';
-import { NodeConfig } from '../configure/NodeConfig';
 import { SubqueryProject } from '../configure/SubqueryProject';
-import { delay } from '../utils/promise';
 import * as SubstrateUtil from '../utils/substrate';
 import { ApiService } from './api.service';
 import { DictionaryService } from './dictionary.service';
@@ -22,6 +22,7 @@ import { DsProcessorService } from './ds-processor.service';
 import { DynamicDsService } from './dynamic-ds.service';
 import { FetchService } from './fetch.service';
 import { IndexerManager } from './indexer.manager';
+import { ProjectService } from './project.service';
 import { BlockContent } from './types';
 import { BlockDispatcherService } from './worker/block-dispatcher.service';
 
@@ -74,6 +75,15 @@ function mockIndexerManager(): IndexerManager & {
   } as any;
 }
 
+function mockProjectService(): ProjectService {
+  return {
+    blockOffset: 1,
+    getProcessedBlockCount: jest.fn(() => Promise.resolve(0)),
+    upsertMetadataBlockOffset: jest.fn(),
+    setBlockOffset: jest.fn(),
+  } as any;
+}
+
 jest.setTimeout(200000);
 const nodeConfig = new NodeConfig({
   subquery: 'asdf',
@@ -109,7 +119,7 @@ async function createApp(
             nodeConfig,
             indexerManager,
             eventEmitter,
-            null,
+            mockProjectService(),
           ),
         inject: [ApiService, NodeConfig, EventEmitter2, IndexerManager],
       },
@@ -128,7 +138,10 @@ async function createApp(
         },
         inject: [DsProcessorService, SubqueryProject],
       },
-      DictionaryService,
+      {
+        provide: DictionaryService,
+        useFactory: () => new DictionaryService(project, nodeConfig),
+      },
       SchedulerRegistry,
       FetchService,
     ],
@@ -148,8 +161,8 @@ describe('FetchService', () => {
   let fetchService: FetchService;
 
   afterEach(async () => {
-    fetchService.onApplicationShutdown();
-    app.get('IBlockDispatcher').onApplicationShutdown();
+    fetchService?.onApplicationShutdown();
+    app?.get('IBlockDispatcher').onApplicationShutdown();
     await delay(2);
     await app?.close();
   });

@@ -9,15 +9,17 @@ import {
   gql,
 } from '@apollo/client/core';
 import { Injectable, OnApplicationShutdown } from '@nestjs/common';
+import {
+  getYargsOption,
+  NodeConfig,
+  timeout,
+  getLogger,
+  profiler,
+} from '@subql/node-core';
 import { DictionaryQueryCondition, DictionaryQueryEntry } from '@subql/types';
 import { buildQuery, GqlNode, GqlQuery, GqlVar, MetaData } from '@subql/utils';
 import fetch from 'node-fetch';
-import { NodeConfig } from '../configure/NodeConfig';
 import { SubqueryProject } from '../configure/SubqueryProject';
-import { getLogger } from '../utils/logger';
-import { profiler } from '../utils/profiler';
-import { timeout } from '../utils/promise';
-import { getYargsOption } from '../yargs';
 
 export type SpecVersion = {
   id: string;
@@ -65,14 +67,18 @@ function extractVars(
         and: i.map((j, innerIdx) => {
           const v = extractVar(`${entity}_${outerIdx}_${innerIdx}`, j);
           gqlVars.push(v);
-          return { [sanitizeArgField(j.field)]: { equalTo: `$${v.name}` } };
+          return {
+            // Use case insensitive here due to go-dictionary generate name is in lower cases
+            // Origin dictionary still using camelCase
+            [sanitizeArgField(j.field)]: { equalToInsensitive: `$${v.name}` },
+          };
         }),
       };
     } else if (i.length === 1) {
       const v = extractVar(`${entity}_${outerIdx}_0`, i[0]);
       gqlVars.push(v);
       filter.or[outerIdx] = {
-        [sanitizeArgField(i[0].field)]: { equalTo: `$${v.name}` },
+        [sanitizeArgField(i[0].field)]: { equalToInsensitive: `$${v.name}` },
       };
     }
   });
